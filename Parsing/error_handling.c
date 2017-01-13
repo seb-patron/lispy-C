@@ -1,6 +1,7 @@
 #include "mpc.h"
 #include <stdio.h> 
 #include <stdlib.h>
+#include <math.h>
 
 #ifdef _WIN32
 #include <string.h>
@@ -83,6 +84,7 @@ lval eval_op(lval x, char* op, lval y) {
     if (strcmp(op, "-") == 0) { return lval_num(x.num - y.num); }
     if (strcmp(op, "*") == 0) { return lval_num(x.num * y.num); }
     if (strcmp(op, "%") == 0) { return lval_num(x.num % y.num); }
+    if (strcmp(op, "^") == 0) { return lval_num(pow(x.num, y.num)); }
     if (strcmp(op, "/") == 0) { 
         return y.num == 0
         ? lval_err(LERR_DIV_ZERO)
@@ -126,7 +128,7 @@ int main(int argc, char** argv) {
     mpca_lang(MPCA_LANG_DEFAULT,
     "                                                            \
         number      : /-?[0-9]+/;                                \
-        operator    : '+' | '-' | '*' | '/' | '%';               \
+        operator    : '+' | '-' | '*' | '/' | '%' | '^';         \
         expression  : <number> | '('<operator> <expression>+ ')';\
         lispy       : /^/ <operator> <expression>+ /$/;          \
     ",
