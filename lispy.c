@@ -198,53 +198,11 @@ lval* lval_eval_sexpr(lval* v){
 }
 
 
-// lval eval_op(lval x, char* op, lval y) {
-
-//     /* break if error passed in to x or y */
-//     if (x.type == LVAL_ERR) { return x; }
-//     if (y.type == LVAL_ERR) { return y; }
-
-
-//     if (strcmp(op, "+") == 0) { return lval_num(x.num + y.num); }
-//     if (strcmp(op, "-") == 0) { return lval_num(x.num - y.num); }
-//     if (strcmp(op, "*") == 0) { return lval_num(x.num * y.num); }
-//     if (strcmp(op, "%") == 0) { return lval_num(x.num % y.num); }
-//     if (strcmp(op, "^") == 0) { return lval_num(pow(x.num, y.num)); }
-//     if (strcmp(op, "/") == 0) { 
-//         return y.num == 0
-//         ? lval_err(LERR_DIV_ZERO)
-//         : lval_num(x.num / y.num);
-//         }
-
-//     return lval_err(LERR_BAD_OP);
-// }
-
-
 lval* lval_eval(lval* v) {
     /* Evaluate sexpressions */
     if (v->type == LVAL_SEXPR) { return lval_eval_sexpr(v); }
     /* ALl other eval types remain the same */
     return v;
-
-    /* if tagged as number return directly */
-    // if(strstr(t->tag, "number")) {
-
-    //     errno = 0;
-    //     long x = strtol(t->contents, NULL, 10);
-    //     return errno != ERANGE ? lval_num(x) : lval_err(LERR_BAD_NUM);
-    // }
-
-    // char* op = t->children[1]->contents;
-
-    // lval x = eval(t->children[2]);
-
-    // int i = 3;
-    // while (strstr(t->children[i]->tag, "expr")) {
-    //     x = eval_op(x, op, eval(t->children[i]));
-    //     i++;
-    // }
-
-    // return x;
 }
 
 lval* lval_pop(lval* v, int i) {
@@ -345,13 +303,6 @@ int main(int argc, char** argv) {
         
         mpc_result_t r;
         if (mpc_parse("<stdin>", input, Lispy, &r)) {
-            /* on success print AST */
-            // lval result = eval(r.output);
-            // lval_println(result);
-            // mpc_ast_delete(r.output);
-            // lval* x = lval_read(r.output);
-            // lval_println(x);
-            // lval_del(x);
             lval* x = lval_eval(lval_read(r.output));
             lval_println(x);
             lval_del(x);
@@ -362,7 +313,7 @@ int main(int argc, char** argv) {
             mpc_err_delete(r.error);
         }
 
-        /*free(input);*/
+        free(input);
     }
 
     mpc_cleanup(5, Number, Symbol, Sexpression, Expression, Lispy);
