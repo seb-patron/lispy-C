@@ -27,8 +27,11 @@ void add_history(char* unused) {}
 
 /*
 execute with:
-cc -std=c99 -Wall parsing.c mpc.c -ledit -lm -o parsing
+cc -std=c99 -Wall lispy.c mpc.c -ledit -lm -o lispy
 */
+
+#define LASSERT(args, cond, err) \
+    if (!(cond)) { lval_del(args); return lval_err(err); }
 
 enum {LERR_DIV_ZERO, LERR_BAD_NUM, LERR_BAD_OP};
 enum {LVAL_NUM, LVAL_ERR, LVAL_SYM, LVAL_SEXPR, LVAL_QEXPR};
@@ -46,6 +49,7 @@ typedef struct lval{
 void lval_print(lval* v);
 lval* lval_add(lval* v, lval* x);
 lval* lval_pop(lval* v, int i);
+lval* builtin(lval* a, char* func);
 lval* builtin_op(lval* a, char* op);
 lval* lval_take(lval* v, int i);
 lval* lval_eval(lval* v);
@@ -146,11 +150,34 @@ lval* lval_read(mpc_ast_t* t) {
     return x;
 }
 
+
+/*
+// Increases the count of the lval list by one, then uses
+// realloc to reallocate the amount of space required by v->cell
+// New space is used to store extra lval
+*/
 lval* lval_add(lval* v, lval* x) {
     v->count++;
     v->cell = realloc(v->cell, sizeof(lval) * v->count);
     v->cell[v->count -1] = x;
     return v;
+}
+
+
+/*
+// Pops each item from y and adds it to x until y is empty, and 
+// then deletes y and returns x. Used by builtin_join function
+*/
+lval* lval_join(lval* x, lval* y) {
+
+    /* For each cell in y, take it and add it to x */
+    while (y->count) {
+        x = lval_add(x, lval_pop(y, 0));
+    }
+
+    /* Delete emtpy y, return x */
+    lval_del(y);
+    return x;
 }
 
 void lval_expr_print(lval* v, char open, char close) {
@@ -208,12 +235,12 @@ lval* lval_eval_sexpr(lval* v){
     }
 
     /* Call Builtin with operator */
-    lval* result = builtin_op(v, f->sym);
+    lval* result = builtin(v, f->sym);
     lval_del(f);
     return result;
 }
 
-
+/* checks if S expression and then passed to lval_eval_sexpr */
 lval* lval_eval(lval* v) {
     /* Evaluate sexpressions */
     if (v->type == LVAL_SEXPR) { return lval_eval_sexpr(v); }
@@ -221,6 +248,13 @@ lval* lval_eval(lval* v) {
     return v;
 }
 
+/* 
+// extracts a single element from an S expression at index i and shifts the 
+// rest of the list backward so that it no longer contains that lval
+// returns the extracted value
+// Does NOT delete remains, this must be done at some point after function
+// call with lval_del
+*/
 lval* lval_pop(lval* v, int i) {
     /* Find item at "i" */
     lval* x = v->cell[i];
@@ -237,9 +271,76 @@ lval* lval_pop(lval* v, int i) {
     return x;
 }
 
+
+/*
+// extracts a single element from an S expression at index i and deletes the 
+// rest of the list. Only element taken at i needs o be deleted
+//
+// returns element extracted at i 
+*/
 lval* lval_take(lval* v, int i) {
     lval* x = lval_pop(v, i);
     lval_del(v);
+    return x;
+}
+
+
+/*
+// builtin functions
+*/
+
+/* Takes a Q expression and returns a Q expression with only the first element */
+lval* builtin_head(lval* a) {
+    LASSERT(a, a->count == 1, "function head passed in too many arguments");
+    LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "function head passed in wrong argument type");
+    LASSERT(a, a->cell[0]->count != 0, "function head passed in {}"); // if Q expresion is empty err is triggered
+
+    lval* v = lval_take(a, 0);
+    while(v->count > 1) {
+        lval_del(lval_pop(v,1));
+    }
+    return v;
+}
+
+/* Takes a Q expression and returns a Q expression with the first element removed */
+lval* builtin_tail(lval* a) {
+    LASSERT(a, a->count == 1, "function head passed in too many arguments");
+    LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "function head passed in wrong argument type");
+    LASSERT(a, a->cell[0]->count != 0, "function head passed in {}"); // if Q expresion is empty err is triggered
+
+    lval* v = lval_take(a, 0);
+    lval_del(lval_pop(v,0));
+    return v;
+}
+
+/* Converts an S Expression into a Q expression */
+lval* builtin_list(lval* a) {
+    a->type = LVAL_QEXPR;
+    return a;
+}
+
+/* Takes a Q expression and evaluates it as if it were an S expression using lval_eval*/
+lval* builtin_eval(lval* a) {
+    LASSERT(a, a->count == 1, "function head passed in too many arguments");
+    LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "function head passed in wrong argument type");
+
+    lval* x = lval_take(a, 0);
+    x->type = LVAL_SEXPR;
+    return lval_eval(x);
+}
+
+/* Takes multiple Q expression and returns a Q expression with them conjoined together*/
+lval* builtin_join(lval* a) {
+    for (int i = 0; i < a->count; i++) {
+        LASSERT(a, a->cell[i]->type == LVAL_QEXPR, "Function join passed wrong type");
+    }
+
+    lval* x = lval_pop(a,0);
+    while (a->count) {
+        x = lval_join(x, lval_pop(a,0));
+    }
+
+    lval_del(a);
     return x;
 }
 
@@ -286,9 +387,19 @@ lval* builtin_op(lval* a, char* op) {
     }
 
     lval_del(a);
-    return x;
+    return x;   
+}
 
-    
+/* Calls the correct subfunction depeding on what symbol is encountered */
+lval* builtin(lval* a, char* func) {
+    if (strcmp("list", func) == 0) { return builtin_list(a); }
+    if (strcmp("head", func) == 0) { return builtin_head(a); }
+    if (strcmp("tail", func) == 0) { return builtin_tail(a); }
+    if (strcmp("join", func) == 0) { return builtin_join(a); }
+    if (strcmp("eval", func) == 0) { return builtin_eval(a); }
+    if (strcmp("+-/*^%", func))    { return builtin_op(a, func); }
+    lval_del(a);
+    return lval_err("Unkown function");
 }
 
 int main(int argc, char** argv) {
@@ -303,11 +414,12 @@ int main(int argc, char** argv) {
     mpca_lang(MPCA_LANG_DEFAULT,
     "                                                            \
         number      : /-?[0-9]+/;                                \
-        symbol      : '+' | '-' | '*' | '/' | '%' | '^';         \
-        sexpr       : '(' <expr>* ')';                            \
-        qexpr       : '{' <expr>* '}';                          \
-        expr        : <number> | <symbol> | <sexpr> | <qexpr>;    \
-        lispy       : /^/ <expr>* /$/;                          \
+        symbol      : \"list\" | \"head\" | \"tail\" | \"join\"| \
+                    \"eval\" |'+' | '-' | '*' | '/' | '%' | '^'; \
+        sexpr       : '(' <expr>* ')';                           \
+        qexpr       : '{' <expr>* '}';                           \
+        expr        : <number> | <symbol> | <sexpr> | <qexpr>;   \
+        lispy       : /^/ <expr>* /$/;                           \
     ",
     Number, Symbol, Sexpression, Qexpression, Expression, Lispy);
 
